@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GAY CRUSH LOVE</title>
+    <style>
+        :root {
+            --ui-bg: rgba(0, 0, 0, 0.7);
+            --text-color: #fff;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            touch-action: none; /* 彻底禁止页面滚动和缩放 */
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        #game-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 顶部 UI (生存时间) */
+        #top-ui {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .timer-box {
+            background: var(--ui-bg);
+            border: 2px solid #555;
+            border-radius: 12px;
+            padding: 10px 30px;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+        }
+
+        .timer-label {
+            color: #aaa;
+            font-size: 14px;
+            margin-bottom: 5px;
+            letter-spacing: 2px;
+        }
+
+        .timer-value {
+            color: #ff3b30;
+            font-size: 28px;
+            font-weight: bold;
+            font-family: monospace;
+            text-shadow: 0 0 8px rgba(255, 59, 48, 0.6);
+        }
+
+        /* 手机端虚拟摇杆触摸区 */
+        #joystick-zone {
+            position: absolute;
+            inset: 0;
+            z-index: 5;
+        }
+
+        #joystick-base {
+            position: absolute;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+            pointer-events: none;
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+        }
+
+        #joystick-stick {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        /* 游戏结束/结算画面 */
+        #overlay-screen {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            opacity: 1;
+            transition: opacity 0.5s;
+        }
+
+        #overlay-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .modal {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 16px;
+            padding: 30px;
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+
+        .title-text {
+            font-size: 32px;
+            font-weight: 900;
+            margin-bottom: 20px;
+            background: linear-gradient(to right, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3);
+            -webkit-background-clip: text;
+            color: transparent;
+            animation: hue 3s linear infinite;
+        }
+
+        @keyframes hue {
+            to { filter: hue-rotate(360deg); }
+        }
+
+        .lang-text {
+            font-size: 16px;
+            color: #ddd;
+            margin: 12px 0;
+            line-height: 1.4;
+            font-weight: 500;
+        }
+        
+        .cn-text { color: #ffeb3b; font-size: 18px; font-weight: bold;}
+        .jp-text { color: #ffb6c1; }
+        .kr-text { color: #87cefa; }
+        .en-text { color: #98fb98; }
+
+        .score-highlight {
+            font-size: 22px;
+            color: #ff3b30;
+            font-weight: 900;
+            margin: 0 4px;
+        }
+
+        .btn {
+            margin-top: 25px;
+            background: #ff3b30;
+            color: white;
+            border: none;
+            padding: 14px 40px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 99px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(255, 59, 48, 0.4);
+            transition: transform 0.1s;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        #start-modal { display: block; }
+        #game-over-modal { display: none; }
+    </style>
+</head>
+<body>
+
+    <!-- 游戏主画布 -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- 手机虚拟摇杆 -->
+    <div id="joystick-zone"></div>
+    <div id="joystick-base"><div id="joystick-stick"></div></div>
+
+    <!-- 顶部时间 -->
+    <div id="top-ui">
+        <div class="timer-box">
+            <div class="timer-label">SURVIVAL</div>
+            <div class="timer-value" id="timer-display">0.00</div>
+        </div>
+    </div>
+
+    <!-- UI 覆盖层 -->
+    <div id="overlay-screen">
+        <!-- 开始界面 -->
+        <div class="modal" id="start-modal">
+            <div class="title-text" style="font-size: 28px;">GAY CRUSH LOVE</div>
+            <p style="color: #bbb; font-size: 15px; margin-bottom: 20px;">
+                Swipe screen or use WASD to move.<br>
+                Dodge the pursuit! The maze gets harder over time.<br>
+                (If he gets stuck, he WILL destroy the walls!)
+            </p>
+            <button class="btn" id="start-btn">Start Escape</button>
+        </div>
+
+        <!-- 死亡界面 -->
+        <div class="modal" id="game-over-modal">
+            <div class="title-text">BUSTED!</div>
+            
+            <div class="lang-text cn-text">恭喜你，在坚持了 <span class="score-highlight score-val">0</span> 秒后变成了GAY</div>
+            <div class="lang-text jp-text">おめでとうございます、<span class="score-highlight score-val">0</span>秒間生き延びた後、あなたはGAYになりました</div>
+            <div class="lang-text kr-text">축하합니다, <span class="score-highlight score-val">0</span>초 동안 버틴 후 당신은 GAY가 되었습니다</div>
+            <div class="lang-text en-text">Congratulations, after surviving for <span class="score-highlight score-val">0</span> seconds, you became GAY</div>
+
+            <button class="btn" id="restart-btn">Restart</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const overlay = document.getElementById('overlay-screen');
+        const startModal = document.getElementById('start-modal');
+        const gameOverModal = document.getElementById('game-over-modal');
+        const timerDisplay = document.getElementById('timer-display');
+        const scoreVals = document.querySelectorAll('.score-val');
+        
+        // 摇杆元素
+        const joyZone = document.getElementById('joystick-zone');
+        const joyBase = document.getElementById('joystick-base');
+        const joyStick = document.getElementById('joystick-stick');
+
+        // 地图与网格配置
+        const TILE_SIZE = 50;
+        const MAP_COLS = 30; // 地图宽 1500px
+        const MAP_ROWS = 30; // 地图高 1500px
+        let map = []; // 2D 数组，0=空，1=墙壁
+
+        // 游戏状态
+        let state = 'MENU'; // MENU, PLAYING, GAMEOVER
+        let survivalTime = 0;
+        let lastTime = 0;
+        let difficultyTimer = 0;
+
+        // 玩家输入
+        let input = { x: 0, y: 0 };
+        const keys = {};
+
+        // 视觉特效粒子
+        let particles = [];
+
+        // 实体基类
+        class Entity {
+            constructor(x, y, radius) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.vx = 0;
+                this.vy = 0;
+                this.speed = 0;
+            }
+        }
+
+        let player = new Entity(MAP_COLS * TILE_SIZE / 2, MAP_ROWS * TILE_SIZE / 2 + 200, 15);
+        // 【修改】：将敌人的物理碰撞半径进一步缩小到 12，让他犹如泥鳅一样钻缝隙
+        let enemy = new Entity(MAP_COLS * TILE_SIZE / 2, MAP_ROWS * TILE_SIZE / 2 - 200, 12);
+        
+        // 摄像机
+        let camera = { x: 0, y: 0 };
+
+        // 监听键盘
+        window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+        window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+        // 监听虚拟摇杆 (支持多点触控防干扰)
+        let touchId = null;
+        let startPos = { x: 0, y: 0 };
+
+        joyZone.addEventListener('touchstart', e => {
+            if (state !== 'PLAYING') return;
+            e.preventDefault();
+            if (touchId !== null) return; // 已经有触摸点了
+            const touch = e.changedTouches[0];
+            touchId = touch.identifier;
+            startPos = { x: touch.clientX, y: touch.clientY };
+            
+            joyBase.style.display = 'block';
+            joyBase.style.left = startPos.x + 'px';
+            joyBase.style.top = startPos.y + 'px';
+            updateJoystick(touch);
+        }, { passive: false });
+
+        joyZone.addEventListener('touchmove', e => {
+            if (state !== 'PLAYING') return;
+            e.preventDefault();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === touchId) {
+                    updateJoystick(e.changedTouches[i]);
+                    break;
+                }
+            }
+        }, { passive: false });
+
+        const endTouch = (e) => {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === touchId) {
+                    touchId = null;
+                    joyBase.style.display = 'none';
+                    joyStick.style.transform = `translate(-50%, -50%)`;
+                    input.x = 0; input.y = 0;
+                    break;
+                }
+            }
+        };
+        joyZone.addEventListener('touchend', endTouch);
+        joyZone.addEventListener('touchcancel', endTouch);
+
+        function updateJoystick(touch) {
+            let dx = touch.clientX - startPos.x;
+            let dy = touch.clientY - startPos.y;
+            let dist = Math.hypot(dx, dy);
+            const maxDist = 50;
+            
+            if (dist > maxDist) {
+                dx = (dx / dist) * maxDist;
+                dy = (dy / dist) * maxDist;
+            }
+            
+            joyStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+            input.x = dx / maxDist;
+            input.y = dy / maxDist;
+        }
+
+        // 初始化地图
+        function generateMap() {
+            map = [];
+            for (let r = 0; r < MAP_ROWS; r++) {
+                let row = [];
+                for (let c = 0; c < MAP_COLS; c++) {
+                    // 四周变成死胡同边界
+                    if (r === 0 || r === MAP_ROWS - 1 || c === 0 || c === MAP_COLS - 1) {
+                        row.push(1);
+                    } else {
+                        row.push(0);
+                    }
+                }
+                map.push(row);
+            }
+
+            // 生成华丽的初始迷宫结构
+            for (let r = 2; r < MAP_ROWS - 2; r += 2) {
+                for (let c = 2; c < MAP_COLS - 2; c += 2) {
+                    map[r][c] = 1; // 支柱
+                    // 随机连接相邻节点，形成迷宫
+                    let dir = Math.floor(Math.random() * 4);
+                    if (dir === 0) map[r - 1][c] = 1;
+                    else if (dir === 1) map[r + 1][c] = 1;
+                    else if (dir === 2) map[r][c - 1] = 1;
+                    else if (dir === 3) map[r][c + 1] = 1;
+                }
+            }
+
+            // 清理中心区域，保证玩家和敌人的出生点宽敞且不被堵死
+            let cx = Math.floor(MAP_COLS / 2);
+            let cy = Math.floor(MAP_ROWS / 2);
+            for (let r = cy - 6; r <= cy + 6; r++) {
+                for (let c = cx - 4; c <= cx + 4; c++) {
+                    map[r][c] = 0;
+                }
+            }
+
+            // 随机打通一些墙壁，增加逃跑的路径分支
+            for(let i=0; i<50; i++) {
+                let r = Math.floor(Math.random() * (MAP_ROWS - 4)) + 2;
+                let c = Math.floor(Math.random() * (MAP_COLS - 4)) + 2;
+                map[r][c] = 0;
+            }
+        }
+
+        // 随时间增加难度：随机生成墙壁，但避开玩家和鬼
+        function spawnRandomWalls(count) {
+            let spawned = 0;
+            let attempts = 0;
+            while (spawned < count && attempts < 100) {
+                attempts++;
+                let r = Math.floor(Math.random() * (MAP_ROWS - 2)) + 1;
+                let c = Math.floor(Math.random() * (MAP_COLS - 2)) + 1;
+                
+                if (map[r][c] === 1) continue; // 已经是墙
+
+                let wX = c * TILE_SIZE + TILE_SIZE/2;
+                let wY = r * TILE_SIZE + TILE_SIZE/2;
+                
+                // 确保不在玩家或鬼的附近生成（缓冲距离200）
+                if (Math.hypot(wX - player.x, wY - player.y) > 200 && 
+                    Math.hypot(wX - enemy.x, wY - enemy.y) > 200) {
+                    map[r][c] = 1;
+                    spawned++;
+                    // 产生生成特效
+                    createParticles(wX, wY, '#fff');
+                }
+            }
+        }
+
+        // 创建爆炸/碎片粒子 (支持类型)
+        function createParticles(x, y, colorStr, type = 'debris') {
+            for(let i=0; i<15; i++) {
+                particles.push({
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 300,
+                    vy: (Math.random() - 0.5) * 300,
+                    life: 0.8 + Math.random() * 0.5,
+                    color: colorStr || `hsl(${Math.random()*360}, 100%, 60%)`,
+                    type: type
+                });
+            }
+        }
+
+        // AABB 圆形与方块碰撞检测
+        function collides(x, y, radius) {
+            // 检查圆所在边界框的四个角所在的网格
+            const points = [
+                {cx: x - radius, cy: y - radius},
+                {cx: x + radius, cy: y - radius},
+                {cx: x - radius, cy: y + radius},
+                {cx: x + radius, cy: y + radius}
+            ];
+            
+            for (let p of points) {
+                let col = Math.floor(p.cx / TILE_SIZE);
+                let row = Math.floor(p.cy / TILE_SIZE);
+                if (col < 0 || col >= MAP_COLS || row < 0 || row >= MAP_ROWS) return true;
+                if (map[row][col] === 1) return true;
+            }
+            return false;
+        }
+
+        // 初始化游戏
+        function initGame() {
+            generateMap();
+            player.x = MAP_COLS * TILE_SIZE / 2;
+            player.y = MAP_ROWS * TILE_SIZE / 2 + 200;
+            player.speed = 220; // 玩家速度
+            
+            enemy.x = MAP_COLS * TILE_SIZE / 2;
+            enemy.y = MAP_ROWS * TILE_SIZE / 2 - 200;
+            enemy.speed = 190; // 初始较慢，逐渐加快
+            enemy.stuckTimer = 0;
+
+            survivalTime = 0;
+            difficultyTimer = 0;
+            particles = [];
+            
+            input = {x:0, y:0};
+            touchId = null;
+            joyBase.style.display = 'none';
+
+            overlay.classList.add('hidden');
+            startModal.style.display = 'none';
+            gameOverModal.style.display = 'none';
+            joyZone.style.pointerEvents = 'auto'; // 启用摇杆
+
+            state = 'PLAYING';
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 核心循环
+        function gameLoop(timestamp) {
+            let dt = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
+            if (dt > 0.1) dt = 0.1; // 防止切屏导致时间突进
+
+            if (state === 'PLAYING') {
+                update(dt);
+            }
+            draw();
+
+            if (state !== 'MENU') {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function update(dt) {
+            survivalTime += dt;
+            timerDisplay.textContent = survivalTime.toFixed(2);
+
+            // 迷宫生态恢复机制：每2秒一点一点随机生成新的墙壁，对抗敌人的破坏
+            difficultyTimer += dt;
+            if (difficultyTimer > 2) {
+                difficultyTimer = 0;
+                // 随着时间推移，生成的墙壁数量逐渐增多
+                spawnRandomWalls(Math.floor(4 + survivalTime * 0.3)); 
+            }
+
+            // 处理键盘输入 (与摇杆叠加/覆盖)
+            let kx = 0, ky = 0;
+            if (keys['w'] || keys['arrowup']) ky -= 1;
+            if (keys['s'] || keys['arrowdown']) ky += 1;
+            if (keys['a'] || keys['arrowleft']) kx -= 1;
+            if (keys['d'] || keys['arrowright']) kx += 1;
+            
+            let moveX = input.x;
+            let moveY = input.y;
+            
+            if (kx !== 0 || ky !== 0) {
+                // 键盘标准化
+                let norm = Math.hypot(kx, ky);
+                moveX = kx / norm;
+                moveY = ky / norm;
+            }
+
+            // 玩家移动 (带滑动碰撞)
+            let px = player.x + moveX * player.speed * dt;
+            if (!collides(px, player.y, player.radius)) player.x = px;
+            
+            let py = player.y + moveY * player.speed * dt;
+            if (!collides(player.x, py, player.radius)) player.y = py;
+
+            // 敌人AI逻辑 (动态提速 + 寻路 + 破墙)
+            enemy.speed = Math.min(190 + (survivalTime * 0.8), 240); // 速度逐渐变快但有上限
+            
+            let dx = player.x - enemy.x;
+            let dy = player.y - enemy.y;
+            let dist = Math.hypot(dx, dy);
+
+            if (dist > 0) {
+                let dirX = dx / dist;
+                let dirY = dy / dist;
+                
+                let ex = enemy.x + dirX * enemy.speed * dt;
+                let ey = enemy.y + dirY * enemy.speed * dt;
+                
+                let movedX = false;
+                let movedY = false;
+
+                if (!collides(ex, enemy.y, enemy.radius)) {
+                    enemy.x = ex;
+                    movedX = true;
+                }
+                if (!collides(enemy.x, ey, enemy.radius)) {
+                    enemy.y = ey;
+                    movedY = true;
+                }
+
+                // 新的卡墙判定：如果在 X 轴或 Y 轴上想移动却被挡住了，就开始积攒怒气
+                let isStuck = false;
+                if (Math.abs(dirX) > 0.1 && !movedX) isStuck = true;
+                if (Math.abs(dirY) > 0.1 && !movedY) isStuck = true;
+
+                // 破墙狂暴机制：只要碰到墙，就会快速发怒
+                if (isStuck && dist > player.radius + enemy.radius + 5) {
+                    enemy.stuckTimer += dt;
+                    if (enemy.stuckTimer > 0.5) { 
+                        enemy.stuckTimer = 0;
+                        // 炸毁自身周围 3x3 范围内的所有墙壁！
+                        let eCol = Math.floor(enemy.x / TILE_SIZE);
+                        let eRow = Math.floor(enemy.y / TILE_SIZE);
+                        for(let r = eRow - 1; r <= eRow + 1; r++) {
+                            for(let c = eCol - 1; c <= eCol + 1; c++) {
+                                // 保留最外围的绝对边界
+                                if(r > 0 && r < MAP_ROWS-1 && c > 0 && c < MAP_COLS-1) {
+                                    if (map[r][c] === 1) {
+                                        map[r][c] = 0;
+                                        createParticles(c*TILE_SIZE+25, r*TILE_SIZE+25, '#fff', 'debris'); // 爆炸！
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // 没有卡住，怒气渐渐消散（而不是像以前一样立刻清零）
+                    enemy.stuckTimer = Math.max(0, enemy.stuckTimer - dt * 2); 
+                    
+                    // 鬼畜特效：移动时随机掉落爱心
+                    if (Math.random() < 0.15) {
+                        particles.push({
+                            x: enemy.x + (Math.random() - 0.5) * 30, 
+                            y: enemy.y + (Math.random() - 0.5) * 30,
+                            vx: 0, vy: -30, life: 1, type: 'heart', color: '#ff69b4'
+                        });
+                    }
+                }
+            }
+
+            // 更新粒子
+            particles.forEach(p => {
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.life -= dt;
+            });
+            particles = particles.filter(p => p.life > 0);
+
+            // 碰撞检测：被抓到了 (虽然敌人物理半径变小了，但抓人判定依然要保持相对宽松，补偿视觉上的大头)
+            if (dist < player.radius + 26) {
+                triggerGameOver();
+            }
+
+            // 相机跟随玩家
+            camera.x = player.x - canvas.width / 2;
+            camera.y = player.y - canvas.height / 2;
+        }
+
+        function triggerGameOver() {
+            state = 'GAMEOVER';
+            joyZone.style.pointerEvents = 'none'; // 禁用摇杆，防止误触
+            
+            scoreVals.forEach(el => el.textContent = survivalTime.toFixed(2));
+            
+            // 延迟一点弹出，让玩家看看自己是怎么变成彩虹色的
+            setTimeout(() => {
+                overlay.classList.remove('hidden');
+                gameOverModal.style.display = 'block';
+            }, 1000);
+        }
+
+        // 绘制相关
+        function draw() {
+            // 自适应窗口大小
+            if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
+
+            // 被抓后的全屏彩虹特效闪烁
+            if (state === 'GAMEOVER') {
+                ctx.fillStyle = `hsl(${(Date.now()/5)%360}, 100%, 60%)`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            } else {
+                ctx.fillStyle = '#111'; // 基础背景色
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+
+            ctx.save();
+            ctx.translate(-camera.x, -camera.y);
+
+            // 画地板网格 (青鬼的幽暗豪宅风)
+            ctx.strokeStyle = '#222';
+            ctx.lineWidth = 2;
+            let startCol = Math.max(0, Math.floor(camera.x / TILE_SIZE));
+            let endCol = Math.min(MAP_COLS, Math.ceil((camera.x + canvas.width) / TILE_SIZE));
+            let startRow = Math.max(0, Math.floor(camera.y / TILE_SIZE));
+            let endRow = Math.min(MAP_ROWS, Math.ceil((camera.y + canvas.height) / TILE_SIZE));
+
+            for (let r = startRow; r < endRow; r++) {
+                for (let c = startCol; c < endCol; c++) {
+                    let tx = c * TILE_SIZE;
+                    let ty = r * TILE_SIZE;
+                    
+                    if (map[r][c] === 1) {
+                        // 墙壁：加深为暗黑紫色，制造极强的阻挡感
+                        ctx.fillStyle = '#16131c'; 
+                        ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+                        
+                        // 墙砖质感纹理
+                        ctx.fillStyle = '#282136';
+                        ctx.fillRect(tx + 2, ty + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+                        ctx.strokeStyle = '#0a080d';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(tx + 2, ty + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+                        
+                        // 3D 边缘高光和阴影
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                        ctx.fillRect(tx + 2, ty + 2, TILE_SIZE - 4, 3); // 顶部高光
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                        ctx.fillRect(tx + 2, ty + TILE_SIZE - 5, TILE_SIZE - 4, 3); // 底部阴影
+                    } else {
+                        // 地板：【修改】换成极为明亮的青灰色洋馆地砖，一眼看清道路
+                        if (state !== 'GAMEOVER') {
+                            ctx.fillStyle = ((r+c)%2 === 0) ? '#cbd0d6' : '#b8c0c8';
+                            ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+                            
+                            // 地板的斜纹装饰，增加细节
+                            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+                            ctx.beginPath();
+                            ctx.moveTo(tx, ty);
+                            ctx.lineTo(tx + TILE_SIZE, ty + TILE_SIZE);
+                            ctx.lineTo(tx, ty + TILE_SIZE);
+                            ctx.fill();
+                            
+                            // 边缘微微发暗
+                            ctx.strokeStyle = 'rgba(0,0,0,0.05)';
+                            ctx.strokeRect(tx, ty, TILE_SIZE, TILE_SIZE);
+                        }
+                    }
+                }
+            }
+
+            // 画粒子
+            particles.forEach(p => {
+                ctx.globalAlpha = p.life;
+                if (p.type === 'heart') {
+                    ctx.fillStyle = p.color;
+                    ctx.font = "16px Arial";
+                    ctx.fillText("❤", p.x - 8, p.y + 8);
+                } else {
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 4, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            });
+            ctx.globalAlpha = 1.0;
+
+            // 画玩家
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            
+            // 添加玩家脚底阴影
+            ctx.fillStyle = 'rgba(0,0,0,0.4)';
+            ctx.beginPath();
+            ctx.ellipse(0, player.radius + 10, player.radius, player.radius*0.4, 0, 0, Math.PI*2);
+            ctx.fill();
+
+            if (state === 'GAMEOVER') {
+                // 玩家变成彩虹色（变成GAY）
+                ctx.fillStyle = `hsl(${(Date.now()/10)%360}, 100%, 50%)`;
+            } else {
+                ctx.fillStyle = '#ffd1dc'; // 皮肤偏粉润
+            }
+            ctx.beginPath();
+            ctx.arc(0, -5, player.radius, 0, Math.PI*2); // 头
+            ctx.fill();
+            
+            // 头发 / 头饰细节
+            if (state !== 'GAMEOVER') {
+                ctx.fillStyle = '#3a2323';
+                ctx.beginPath();
+                ctx.arc(0, -5, player.radius, Math.PI, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            
+            // 身体 - 卡通化更圆润
+            ctx.fillStyle = state === 'GAMEOVER' ? '#ff69b4' : '#5dade2';
+            ctx.beginPath();
+            ctx.rect(-player.radius*0.8, 5, player.radius*1.6, player.radius*1.2); 
+            ctx.fill();
+            ctx.stroke();
+            
+            ctx.restore();
+
+            // 画追击的 GAY (大头青鬼风格 + 妖娆)
+            let bob = Math.sin(survivalTime * 10) * 5; // 走路上下颠簸
+            ctx.save();
+            ctx.translate(enemy.x, enemy.y + bob);
+
+            // 【新增】：脱离物理碰撞体积，单独设定极具压迫感的视觉尺寸
+            let vR = 26; 
+
+            // 彩虹光环
+            ctx.shadowColor = `hsl(${(survivalTime*100)%360}, 100%, 50%)`;
+            ctx.shadowBlur = 30;
+
+            // 硕大的紫色/粉色头部 (宽高比 3:4)
+            ctx.fillStyle = '#d8b4e2'; 
+            ctx.beginPath();
+            ctx.ellipse(0, -10, vR*1.1, vR*1.5, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.shadowBlur = 0; // 取消内层阴影
+
+            // 妖艳的腮红
+            ctx.fillStyle = 'rgba(255, 105, 180, 0.6)';
+            ctx.beginPath();
+            ctx.arc(-12, 5, 8, 0, Math.PI*2);
+            ctx.arc(12, 5, 8, 0, Math.PI*2);
+            ctx.fill();
+
+            // 闪亮的大眼睛
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(-10, -15, 8, 0, Math.PI*2);
+            ctx.arc(10, -15, 8, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#000'; // 瞳孔看向玩家的方向
+            let ex = (player.x - enemy.x) * 0.02;
+            let ey = (player.y - enemy.y) * 0.02;
+            if(ex > 3) ex = 3; if(ex < -3) ex = -3;
+            if(ey > 3) ey = 3; if(ey < -3) ey = -3;
+            ctx.beginPath();
+            ctx.arc(-10 + ex, -15 + ey, 3, 0, Math.PI*2);
+            ctx.arc(10 + ex, -15 + ey, 3, 0, Math.PI*2);
+            ctx.fill();
+
+            // 烈焰红唇 (诡异微笑)
+            ctx.fillStyle = '#e74c3c';
+            ctx.beginPath();
+            ctx.ellipse(0, 15, 12, 6, 0, 0, Math.PI*2);
+            ctx.fill();
+            // 露出一排白牙
+            ctx.fillStyle = 'white';
+            ctx.fillRect(-8, 13, 16, 2);
+
+            // 发怒破墙预警提示 (脸部变红震动)
+            // 【修改】：配合缩短的狂暴时间，预警动画也更快触发
+            if (enemy.stuckTimer > 0.3) {
+                ctx.fillStyle = `rgba(255, 0, 0, ${Math.min(enemy.stuckTimer/0.6, 0.7)})`;
+                ctx.beginPath();
+                ctx.ellipse(0, -10, vR*1.1, vR*1.5, 0, 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            // 鬼畜字幕在头顶
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.font = 'bold 15px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText("♂ COME ON~ ♂", 0, -vR * 2 - 5);
+
+            ctx.restore();
+            ctx.restore(); // 恢复相机变换
+
+            // UI层：画屏幕边缘的暗角 (Vignette 恐怖氛围)
+            if (state !== 'GAMEOVER') {
+                let gradient = ctx.createRadialGradient(
+                    canvas.width/2, canvas.height/2, Math.min(canvas.width, canvas.height) * 0.3,
+                    canvas.width/2, canvas.height/2, Math.max(canvas.width, canvas.height) * 0.8
+                );
+                gradient.addColorStop(0, 'rgba(0,0,0,0)');
+                gradient.addColorStop(1, 'rgba(0,0,0,0.85)');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+        // 按钮事件绑定
+        document.getElementById('start-btn').addEventListener('click', initGame);
+        document.getElementById('restart-btn').addEventListener('click', initGame);
+
+        // 初始画面渲染
+        draw();
+
+    </script>
+</body>
+</html>
